@@ -184,11 +184,15 @@ class BrowserRenderer {
         // Determine preview content
         let previewContent = '';
         if (tab.previewImage) {
-            // Show actual website preview image
-            previewContent = `<img src="${tab.previewImage}" alt="Website Preview" class="tab-preview-image">`;
+            // Show actual website preview image with error handling
+            previewContent = `<img src="${tab.previewImage}" alt="Website Preview" class="tab-preview-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+            // Add fallback text that's hidden by default
+            previewContent += `<div class="tab-preview-text" style="display: none;">${tab.previewText || tab.title || 'Website'}</div>`;
         } else if (tab.favicon) {
             // Show favicon if no preview image
-            previewContent = `<img src="${tab.favicon}" alt="Favicon" class="tab-favicon">`;
+            previewContent = `<img src="${tab.favicon}" alt="Favicon" class="tab-favicon" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+            // Add fallback text that's hidden by default
+            previewContent += `<div class="tab-preview-text" style="display: none;">${tab.previewText || tab.title || 'Website'}</div>`;
         } else if (tab.previewText) {
             // Show text preview as fallback
             previewContent = `<div class="tab-preview-text">${tab.previewText}</div>`;
@@ -261,39 +265,57 @@ class BrowserRenderer {
         const activeTab = this.tabs.find(t => t.id === this.activeTabId);
         if (activeTab && this.webview.src !== 'speed-dial.html') {
             try {
-                // Try multiple methods to capture preview
-                let previewImage = null;
+                console.log('Attempting to capture preview for:', this.webview.src);
                 
-                // Method 1: Try capturePage if available
-                if (this.webview.capturePage && typeof this.webview.capturePage === 'function') {
-                    try {
-                        previewImage = await this.webview.capturePage();
-                        console.log('Preview captured using capturePage');
-                    } catch (e) {
-                        console.log('capturePage failed:', e);
-                    }
+                // Method 1: Try to create a canvas-based preview (most reliable)
+                let previewImage = null;
+                try {
+                    previewImage = await this.createCanvasPreview();
+                    console.log('Canvas preview created successfully');
+                } catch (e) {
+                    console.log('Canvas preview failed:', e);
                 }
                 
-                // Method 2: Try to get favicon as fallback
+                // Method 2: Try to get favicon if canvas failed
                 if (!previewImage) {
                     try {
+                        // Try to get favicon from the webview
                         const favicon = this.webview.getFavicon();
-                        if (favicon) {
-                            previewImage = favicon;
-                            console.log('Using favicon as preview');
+                        if (favicon && favicon.length > 0) {
+                            previewImage = favicon[0];
+                            console.log('Using favicon as preview:', favicon[0]);
                         }
                     } catch (e) {
                         console.log('getFavicon failed:', e);
                     }
                 }
                 
-                // Method 3: Try to create a canvas-based preview
+                // Method 3: Try capturePage as last resort (often doesn't work)
+                if (!previewImage && this.webview.capturePage) {
+                    try {
+                        const dataUrl = await this.webview.capturePage();
+                        if (dataUrl && dataUrl.startsWith('data:')) {
+                            previewImage = dataUrl;
+                            console.log('Preview captured using capturePage');
+                        }
+                    } catch (e) {
+                        console.log('capturePage failed:', e);
+                    }
+                }
+                
+                // Method 4: Try to get a website thumbnail from external service
                 if (!previewImage) {
                     try {
-                        previewImage = await this.createCanvasPreview();
-                        console.log('Preview created using canvas');
+                        const url = this.webview.src;
+                        if (url && url.startsWith('http')) {
+                            const thumbnailUrl = await this.getWebsiteThumbnail(url);
+                            if (thumbnailUrl) {
+                                previewImage = thumbnailUrl;
+                                console.log('Using external thumbnail service');
+                            }
+                        }
                     } catch (e) {
-                        console.log('Canvas preview failed:', e);
+                        console.log('External thumbnail failed:', e);
                     }
                 }
                 
@@ -337,19 +359,68 @@ class BrowserRenderer {
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, 280, 120);
             
+            // Add a subtle pattern overlay
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            for (let i = 0; i < 280; i += 20) {
+                for (let j = 0; j < 120; j += 20) {
+                    if ((i + j) % 40 === 0) {
+                        ctx.fillRect(i, j, 10, 10);
+                    }
+                }
+            }
+            
+            // Add website icon placeholder
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath();
+            ctx.arc(140, 40, 20, 0, 2 * Math.PI);
+            ctx.fill();
+            
             // Add text
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
             const title = this.webview.getTitle() || 'Website';
-            ctx.fillText(title, 140, 60);
+            // Truncate title if too long
+            const displayTitle = title.length > 25 ? title.substring(0, 22) + '...' : title;
+            ctx.fillText(displayTitle, 140, 80);
+            
+            // Add URL info
+            ctx.font = '12px Arial';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            const url = this.webview.src || '';
+            const domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+            if (domain && domain !== 'speed-dial.html') {
+                ctx.fillText(domain, 140, 100);
+            }
             
             // Convert to data URL
             return canvas.toDataURL('image/png');
         } catch (error) {
             console.log('Canvas preview creation failed:', error);
+            return null;
+        }
+    }
+    
+    // Try to get website thumbnail from external service
+    async getWebsiteThumbnail(url) {
+        try {
+            // Use a free thumbnail service
+            const domain = new URL(url).hostname;
+            const thumbnailUrl = `https://api.apiflash.com/v1/urltoimage?access_key=demo&url=${encodeURIComponent(url)}&width=280&height=120&format=jpeg&quality=85`;
+            
+            // Test if the image loads
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(thumbnailUrl);
+                img.onerror = () => resolve(null);
+                img.src = thumbnailUrl;
+                // Timeout after 3 seconds
+                setTimeout(() => resolve(null), 3000);
+            });
+        } catch (error) {
+            console.log('Thumbnail service error:', error);
             return null;
         }
     }
