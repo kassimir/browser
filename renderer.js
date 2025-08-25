@@ -18,6 +18,7 @@ class BrowserRenderer {
         this.tabPanel = document.getElementById('tabPanel');
         this.tabsContainer = document.getElementById('tabsContainer');
         this.newTabBtn = document.getElementById('newTabBtn');
+        this.capturePreviewBtn = document.getElementById('capturePreviewBtn');
         this.webview = document.getElementById('webview');
         this.urlInput = document.getElementById('urlInput');
         this.goBtn = document.getElementById('goBtn');
@@ -35,6 +36,7 @@ class BrowserRenderer {
 
     bindEvents() {
         this.newTabBtn.addEventListener('click', () => this.createNewTab());
+        this.capturePreviewBtn.addEventListener('click', () => this.captureTabPreview());
         this.goBtn.addEventListener('click', () => this.navigateToUrl());
         this.urlInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.navigateToUrl();
@@ -83,8 +85,8 @@ class BrowserRenderer {
             if (this.webview.getTitle()) {
                 this.updateTabTitle(this.webview.getTitle());
             }
-            // Capture preview after page loads with a longer delay for better rendering
-            setTimeout(() => this.captureTabPreview(), 500);
+            // Capture preview after page loads with multiple attempts
+            this.schedulePreviewCapture();
         });
         
         this.webview.addEventListener('page-title-updated', (e) => {
@@ -92,7 +94,12 @@ class BrowserRenderer {
             this.updateTabTitle(e.title);
         });
         
-        this.webview.addEventListener('page-favicon-updated', (e) => this.updateTabFavicon(e.favicons[0]));
+        this.webview.addEventListener('page-favicon-updated', (e) => {
+            console.log('Favicon updated:', e.favicons);
+            this.updateTabFavicon(e.favicons[0]);
+            // Try to capture preview when favicon is available
+            setTimeout(() => this.captureTabPreview(), 200);
+        });
         
         this.webview.addEventListener('did-navigate', (e) => {
             console.log('Webview navigated to:', e.url);
@@ -254,13 +261,54 @@ class BrowserRenderer {
         const activeTab = this.tabs.find(t => t.id === this.activeTabId);
         if (activeTab && this.webview.src !== 'speed-dial.html') {
             try {
-                // Capture a screenshot of the webview content
-                const dataUrl = await this.webview.capturePage();
-                if (dataUrl) {
-                    activeTab.previewImage = dataUrl;
-                    activeTab.previewText = null; // Clear text preview since we have image
-                    this.renderTabs();
+                // Try multiple methods to capture preview
+                let previewImage = null;
+                
+                // Method 1: Try capturePage if available
+                if (this.webview.capturePage && typeof this.webview.capturePage === 'function') {
+                    try {
+                        previewImage = await this.webview.capturePage();
+                        console.log('Preview captured using capturePage');
+                    } catch (e) {
+                        console.log('capturePage failed:', e);
+                    }
                 }
+                
+                // Method 2: Try to get favicon as fallback
+                if (!previewImage) {
+                    try {
+                        const favicon = this.webview.getFavicon();
+                        if (favicon) {
+                            previewImage = favicon;
+                            console.log('Using favicon as preview');
+                        }
+                    } catch (e) {
+                        console.log('getFavicon failed:', e);
+                    }
+                }
+                
+                // Method 3: Try to create a canvas-based preview
+                if (!previewImage) {
+                    try {
+                        previewImage = await this.createCanvasPreview();
+                        console.log('Preview created using canvas');
+                    } catch (e) {
+                        console.log('Canvas preview failed:', e);
+                    }
+                }
+                
+                if (previewImage) {
+                    activeTab.previewImage = previewImage;
+                    activeTab.previewText = null;
+                    console.log('Preview image set successfully');
+                } else {
+                    // Fallback to text preview
+                    activeTab.previewText = this.webview.getTitle() || 'Website';
+                    console.log('Using text preview as fallback');
+                }
+                
+                this.renderTabs();
+                
             } catch (error) {
                 console.log('Could not capture preview image:', error);
                 // Fallback to text preview
@@ -268,6 +316,54 @@ class BrowserRenderer {
                 this.renderTabs();
             }
         }
+    }
+    
+    // Create a canvas-based preview as fallback
+    async createCanvasPreview() {
+        try {
+            // Create a canvas element
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size to match tab preview dimensions
+            canvas.width = 280;
+            canvas.height = 120;
+            
+            // Create a gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, 120);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 280, 120);
+            
+            // Add text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const title = this.webview.getTitle() || 'Website';
+            ctx.fillText(title, 140, 60);
+            
+            // Convert to data URL
+            return canvas.toDataURL('image/png');
+        } catch (error) {
+            console.log('Canvas preview creation failed:', error);
+            return null;
+        }
+    }
+    
+    // Schedule multiple preview capture attempts
+    schedulePreviewCapture() {
+        // Try immediately
+        setTimeout(() => this.captureTabPreview(), 100);
+        
+        // Try after a short delay
+        setTimeout(() => this.captureTabPreview(), 1000);
+        
+        // Try after a longer delay for slow-loading pages
+        setTimeout(() => this.captureTabPreview(), 3000);
     }
 
     navigateToUrl() {

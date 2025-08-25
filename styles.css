@@ -35,13 +35,20 @@ body {
     background-color: #ffffff;
 }
 
+.tab-panel-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 .tab-panel-header h3 {
     color: #495057;
     font-size: 16px;
     font-weight: 600;
 }
 
-.new-tab-btn {
+.new-tab-btn,
+.capture-preview-btn {
     width: 32px;
     height: 32px;
     border: none;
@@ -54,8 +61,17 @@ body {
     transition: background-color 0.2s;
 }
 
+.capture-preview-btn {
+    background-color: #28a745;
+    font-size: 16px;
+}
+
 .new-tab-btn:hover {
     background-color: #0056b3;
+}
+
+.capture-preview-btn:hover {
+    background-color: #218838;
 }
 
 .tabs-container {
