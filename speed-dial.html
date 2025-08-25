@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed Dial</title>
+    <link rel="stylesheet" href="speed-dial.css">
+</head>
+<body>
+    <div class="speed-dial-container">
+        <!-- Header -->
+        <div class="speed-dial-header">
+            <h1>Speed Dial</h1>
+            <button class="add-bookmark-btn" id="addBookmarkBtn">+ Add Bookmark</button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="speed-dial-content">
+            <!-- Categories Sidebar -->
+            <div class="categories-sidebar">
+                <div class="categories-header">
+                    <h3>Categories</h3>
+                    <button class="add-category-btn" id="addCategoryBtn">+</button>
+                </div>
+                <div class="categories-list" id="categoriesList">
+                    <!-- Categories will be dynamically added here -->
+                </div>
+            </div>
+
+            <!-- Bookmarks Grid -->
+            <div class="bookmarks-grid">
+                <div class="bookmarks-header">
+                    <h3 id="currentCategoryTitle">All Bookmarks</h3>
+                    <span id="bookmarkCount">0 bookmarks</span>
+                </div>
+                <div class="bookmarks-container" id="bookmarksContainer">
+                    <!-- Bookmarks will be dynamically added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div class="modal" id="categoryModal">
+        <div class="modal-content">
+            <h3>Add New Category</h3>
+            <input type="text" id="categoryNameInput" placeholder="Category name" maxlength="30">
+            <div class="modal-buttons">
+                <button id="categoryModalCancel">Cancel</button>
+                <button id="categoryModalSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Bookmark Modal -->
+    <div class="modal" id="bookmarkModal">
+        <div class="modal-content">
+            <h3>Add New Bookmark</h3>
+            <input type="text" id="bookmarkTitleInput" placeholder="Bookmark title" maxlength="50">
+            <input type="url" id="bookmarkUrlInput" placeholder="URL (e.g., https://example.com)">
+            <select id="bookmarkCategorySelect">
+                <!-- Categories will be populated here -->
+            </select>
+            <div class="modal-buttons">
+                <button id="bookmarkModalCancel">Cancel</button>
+                <button id="bookmarkModalSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="speed-dial.js"></script>
+</body>
+</html>

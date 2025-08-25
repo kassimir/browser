@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electron Browser</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="browser-container">
+        <!-- Tab Panel (Left Sidebar) -->
+        <div class="tab-panel" id="tabPanel">
+            <div class="tab-panel-header">
+                <h3>Tabs</h3>
+                <button class="new-tab-btn" id="newTabBtn" title="New Tab">+</button>
+            </div>
+            <div class="tabs-container" id="tabsContainer">
+                <!-- Tabs will be dynamically added here -->
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Address Bar -->
+            <div class="address-bar">
+                <div class="navigation-buttons">
+                    <button class="nav-btn" id="backBtn" title="Go Back">←</button>
+                    <button class="nav-btn" id="forwardBtn" title="Go Forward">→</button>
+                    <button class="nav-btn refresh-btn" id="refreshBtn" title="Refresh">↻</button>
+                </div>
+                <div class="url-input-container">
+                    <input type="text" class="url-input" id="urlInput" placeholder="Enter URL or search...">
+                    <button class="go-btn" id="goBtn">Go</button>
+                </div>
+            </div>
+
+            <!-- Webview Container -->
+            <div class="webview-container">
+                <webview id="webview" src="speed-dial.html" allowpopups></webview>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
