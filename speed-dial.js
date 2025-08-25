@@ -80,18 +80,18 @@ class SpeedDial {
         
         // Load default bookmarks
         const defaultBookmarks = [
-            { id: 1, title: 'Google', url: 'https://www.google.com', category: 'tools', icon: 'G' },
-            { id: 2, title: 'YouTube', url: 'https://www.youtube.com', category: 'entertainment', icon: 'Y' },
-            { id: 3, title: 'Facebook', url: 'https://www.facebook.com', category: 'social', icon: 'F' },
-            { id: 4, title: 'Twitter', url: 'https://twitter.com', category: 'social', icon: 'T' },
-            { id: 5, title: 'Reddit', url: 'https://www.reddit.com', category: 'social', icon: 'R' },
-            { id: 6, title: 'GitHub', url: 'https://github.com', category: 'tools', icon: 'G' },
-            { id: 7, title: 'Stack Overflow', url: 'https://stackoverflow.com', category: 'tools', icon: 'S' },
-            { id: 8, title: 'Amazon', url: 'https://www.amazon.com', category: 'shopping', icon: 'A' },
-            { id: 9, title: 'Netflix', url: 'https://www.netflix.com', category: 'entertainment', icon: 'N' },
-            { id: 10, title: 'BBC News', url: 'https://www.bbc.com/news', category: 'news', icon: 'B' },
-            { id: 11, title: 'CNN', url: 'https://www.cnn.com', category: 'news', icon: 'C' },
-            { id: 12, title: 'Wikipedia', url: 'https://www.wikipedia.org', category: 'tools', icon: 'W' }
+            { id: 1, title: 'Google', url: 'https://www.google.com', category: 'tools', icon: 'G', previewImage: 'https://www.google.com/favicon.ico' },
+            { id: 2, title: 'YouTube', url: 'https://www.youtube.com', category: 'entertainment', icon: 'Y', previewImage: 'https://www.youtube.com/favicon.ico' },
+            { id: 3, title: 'Facebook', url: 'https://www.facebook.com', category: 'social', icon: 'F', previewImage: 'https://www.facebook.com/favicon.ico' },
+            { id: 4, title: 'Twitter', url: 'https://twitter.com', category: 'social', icon: 'T', previewImage: 'https://twitter.com/favicon.ico' },
+            { id: 5, title: 'Reddit', url: 'https://www.reddit.com', category: 'social', icon: 'R', previewImage: 'https://www.reddit.com/favicon.ico' },
+            { id: 6, title: 'GitHub', url: 'https://github.com', category: 'tools', icon: 'G', previewImage: 'https://github.com/favicon.ico' },
+            { id: 7, title: 'Stack Overflow', url: 'https://stackoverflow.com', category: 'tools', icon: 'S', previewImage: 'https://stackoverflow.com/favicon.ico' },
+            { id: 8, title: 'Amazon', url: 'https://www.amazon.com', category: 'shopping', icon: 'A', previewImage: 'https://www.amazon.com/favicon.ico' },
+            { id: 9, title: 'Netflix', url: 'https://www.netflix.com', category: 'entertainment', icon: 'N', previewImage: 'https://www.netflix.com/favicon.ico' },
+            { id: 10, title: 'BBC News', url: 'https://www.bbc.com/news', category: 'news', icon: 'B', previewImage: 'https://www.bbc.com/favicon.ico' },
+            { id: 11, title: 'CNN', url: 'https://www.cnn.com', category: 'news', icon: 'C', previewImage: 'https://www.cnn.com/favicon.ico' },
+            { id: 12, title: 'Wikipedia', url: 'https://www.wikipedia.org', category: 'tools', icon: 'W', previewImage: 'https://www.wikipedia.org/favicon.ico' }
         ];
         
         this.bookmarks = defaultBookmarks;
@@ -160,8 +160,17 @@ class SpeedDial {
         bookmarkDiv.className = 'bookmark-tile';
         bookmarkDiv.dataset.bookmarkId = bookmark.id;
         
+        // Create preview image element
+        let previewHtml = '';
+        if (bookmark.previewImage) {
+            previewHtml = `<img src="${bookmark.previewImage}" alt="${bookmark.title}" class="bookmark-preview-image" onerror="this.classList.add('fallback'); this.textContent='${bookmark.icon}'">`;
+        } else {
+            // Fallback to icon if no preview image
+            previewHtml = `<div class="bookmark-preview-image fallback">${bookmark.icon}</div>`;
+        }
+        
         bookmarkDiv.innerHTML = `
-            <div class="bookmark-icon">${bookmark.icon}</div>
+            ${previewHtml}
             <div class="bookmark-title">${bookmark.title}</div>
             <div class="bookmark-url">${this.getDomainFromUrl(bookmark.url)}</div>
         `;
@@ -271,7 +280,8 @@ class SpeedDial {
             title: title,
             url: validUrl,
             category: category,
-            icon: title.charAt(0).toUpperCase()
+            icon: title.charAt(0).toUpperCase(),
+            previewImage: null // Will be populated later if needed
         };
         
         this.bookmarks.push(newBookmark);
