@@ -83,8 +83,8 @@ class BrowserRenderer {
             if (this.webview.getTitle()) {
                 this.updateTabTitle(this.webview.getTitle());
             }
-            // Capture preview after page loads
-            setTimeout(() => this.captureTabPreview(), 100);
+            // Capture preview after page loads with a longer delay for better rendering
+            setTimeout(() => this.captureTabPreview(), 500);
         });
         
         this.webview.addEventListener('page-title-updated', (e) => {
@@ -128,6 +128,7 @@ class BrowserRenderer {
             url: 'speed-dial.html',
             title: 'Speed Dial',
             favicon: null,
+            previewImage: null,
             previewText: 'Speed Dial'
         };
         
@@ -145,6 +146,7 @@ class BrowserRenderer {
                 url: result.url,
                 title: result.title,
                 favicon: null,
+                previewImage: null,
                 previewText: result.title
             };
             
@@ -173,13 +175,21 @@ class BrowserRenderer {
         tabDiv.dataset.tabId = tab.id;
         
         // Determine preview content
-        let previewContent = 'No Preview';
-        if (tab.favicon) {
-            previewContent = `<img src="${tab.favicon}" alt="Favicon">`;
+        let previewContent = '';
+        if (tab.previewImage) {
+            // Show actual website preview image
+            previewContent = `<img src="${tab.previewImage}" alt="Website Preview" class="tab-preview-image">`;
+        } else if (tab.favicon) {
+            // Show favicon if no preview image
+            previewContent = `<img src="${tab.favicon}" alt="Favicon" class="tab-favicon">`;
         } else if (tab.previewText) {
-            previewContent = tab.previewText;
+            // Show text preview as fallback
+            previewContent = `<div class="tab-preview-text">${tab.previewText}</div>`;
         } else if (tab.url === 'speed-dial.html') {
-            previewContent = 'Speed Dial';
+            // Special case for Speed Dial
+            previewContent = '<div class="tab-preview-text speed-dial">Speed Dial</div>';
+        } else {
+            previewContent = '<div class="tab-preview-text">Loading...</div>';
         }
         
         tabDiv.innerHTML = `
@@ -240,16 +250,22 @@ class BrowserRenderer {
     }
 
     // Capture webview content for tab preview
-    captureTabPreview() {
+    async captureTabPreview() {
         const activeTab = this.tabs.find(t => t.id === this.activeTabId);
         if (activeTab && this.webview.src !== 'speed-dial.html') {
-            // For external websites, try to capture a preview
             try {
-                // This would ideally capture a screenshot, but for now we'll update the preview text
+                // Capture a screenshot of the webview content
+                const dataUrl = await this.webview.capturePage();
+                if (dataUrl) {
+                    activeTab.previewImage = dataUrl;
+                    activeTab.previewText = null; // Clear text preview since we have image
+                    this.renderTabs();
+                }
+            } catch (error) {
+                console.log('Could not capture preview image:', error);
+                // Fallback to text preview
                 activeTab.previewText = this.webview.getTitle() || 'Website';
                 this.renderTabs();
-            } catch (error) {
-                console.log('Could not capture preview:', error);
             }
         }
     }
@@ -272,6 +288,8 @@ class BrowserRenderer {
         if (activeTab) {
             activeTab.url = url;
             activeTab.title = 'Loading...';
+            activeTab.previewImage = null; // Clear old preview image
+            activeTab.previewText = 'Loading...';
             this.renderTabs();
         }
         
@@ -461,6 +479,7 @@ class BrowserRenderer {
                     url: result.tab.url || 'speed-dial.html',
                     title: result.tab.title || 'Speed Dial',
                     favicon: null,
+                    previewImage: null,
                     previewText: result.tab.title || 'Speed Dial'
                 };
                 
