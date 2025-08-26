@@ -81,6 +81,50 @@ ipcMain.handle('reopen-tab', () => {
   return { success: false };
 });
 
+// Capture webview content for tab previews
+ipcMain.handle('capture-webview', async (event) => {
+  try {
+    // Get the main window's webContents
+    const mainWebContents = mainWindow.webContents;
+    
+    // Execute JavaScript in the renderer process to capture the webview
+    const result = await mainWebContents.executeJavaScript(`
+      (() => {
+        try {
+          const webview = document.querySelector('webview');
+          if (!webview) {
+            return { success: false, error: 'Webview not found' };
+          }
+          
+          // Check if the webview has a src and is not the speed dial
+          if (!webview.src || webview.src === 'speed-dial.html') {
+            return { success: false, error: 'Invalid webview source' };
+          }
+          
+          // Try to capture the webview content directly
+          if (webview.capturePage && typeof webview.capturePage === 'function') {
+            return { success: true, webviewAvailable: true };
+          } else {
+            return { success: false, error: 'capturePage method not available' };
+          }
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
+      })();
+    `);
+    
+    if (result.success && result.webviewAvailable) {
+      // The webview is available in the renderer, let it handle the capture
+      return { success: true, rendererCapture: true };
+    } else {
+      return { success: false, error: result.error || 'Webview capture not available' };
+    }
+  } catch (error) {
+    console.error('Error checking webview:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('get-closed-tabs', () => {
   return closedTabs;
 });

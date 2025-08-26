@@ -46,30 +46,30 @@ class BrowserRenderer {
         this.forwardBtn.addEventListener('click', () => this.goForward());
         this.refreshBtn.addEventListener('click', () => this.handleRefreshOrStop());
         
-        // Mouse gesture tracking - add to both tab panel and document for global gesture support
+        // Mouse gesture tracking - add to tab panel for local gesture support
         this.tabPanel.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.tabPanel.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.tabPanel.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         this.tabPanel.addEventListener('contextmenu', (e) => e.preventDefault());
         
-        // Global mouse gesture tracking (works over webview)
-        document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Global mouse gesture tracking - use capture phase to intercept events before webview
+        document.addEventListener('mousedown', (e) => this.handleMouseDown(e), true);
+        document.addEventListener('mousemove', (e) => this.handleMouseMove(e), true);
+        document.addEventListener('mouseup', (e) => this.handleMouseUp(e), true);
+        document.addEventListener('contextmenu', (e) => e.preventDefault(), true);
         
         // Handle right-click + left-click for back navigation
         let rightMouseDown = false;
         document.addEventListener('mousedown', (e) => {
             if (e.button === 2) rightMouseDown = true;
-        });
+        }, { passive: true, capture: true });
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0 && rightMouseDown) { // Left click while right mouse is down
                 console.log('Right-click + Left-click detected - Going back');
                 this.goBack();
                 rightMouseDown = false;
             }
-        });
+        }, { passive: true, capture: true });
         
         // Webview events
         this.webview.addEventListener('did-start-loading', () => {
@@ -267,19 +267,75 @@ class BrowserRenderer {
             try {
                 console.log('Attempting to capture preview for:', this.webview.src);
                 
-                // Method 1: Try to create a canvas-based preview (most reliable)
+                // Method 1: Try to capture actual webview screenshot using main process
                 let previewImage = null;
                 try {
-                    previewImage = await this.createCanvasPreview();
-                    console.log('Canvas preview created successfully');
+                    // Wait a bit for the page to fully render
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    console.log('Attempting webview capture via main process...');
+                    console.log('Webview readyState:', this.webview.readyState);
+                    console.log('Webview src:', this.webview.src);
+                    console.log('Webview element:', this.webview);
+                    console.log('Webview capturePage method:', this.webview.capturePage);
+                    console.log('Webview methods:', Object.getOwnPropertyNames(this.webview));
+                    
+                    // Use the main process to check if webview capture is available
+                    if (window.electronAPI && window.electronAPI.captureWebview) {
+                        try {
+                            // Check if webview capture is available
+                            const result = await window.electronAPI.captureWebview();
+                            console.log('Webview check result:', result);
+                            
+                            if (result.success && result.rendererCapture) {
+                                // Webview capture is available in renderer, try to capture directly
+                                try {
+                                    console.log('Attempting direct webview capture...');
+                                    const dataUrl = await this.webview.capturePage({
+                                        width: 280,
+                                        height: 120
+                                    });
+                                    
+                                    if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+                                        previewImage = dataUrl;
+                                        console.log('Real website preview captured successfully via direct webview capture');
+                                    } else {
+                                        console.log('Direct capture returned invalid data:', typeof dataUrl);
+                                    }
+                                } catch (directCaptureError) {
+                                    console.log('Direct webview capture failed:', directCaptureError);
+                                    
+                                    // Try alternative capture method
+                                    try {
+                                        console.log('Trying alternative capture method...');
+                                        const dataUrl = await this.webview.capturePage();
+                                        
+                                        if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+                                            previewImage = dataUrl;
+                                            console.log('Real website preview captured successfully via alternative method');
+                                        } else {
+                                            console.log('Alternative capture returned invalid data:', typeof dataUrl);
+                                        }
+                                    } catch (alternativeError) {
+                                        console.log('Alternative capture also failed:', alternativeError);
+                                    }
+                                }
+                            } else {
+                                console.log('Webview capture not available:', result.error);
+                            }
+                        } catch (captureError) {
+                            console.log('Main process check failed:', captureError);
+                        }
+                    } else {
+                        console.log('captureWebview API not available');
+                    }
                 } catch (e) {
-                    console.log('Canvas preview failed:', e);
+                    console.log('Webview capture failed:', e);
                 }
                 
-                // Method 2: Try to get favicon if canvas failed
+                // Method 2: Try to get favicon as fallback
                 if (!previewImage) {
                     try {
-                        // Try to get favicon from the webview
                         const favicon = this.webview.getFavicon();
                         if (favicon && favicon.length > 0) {
                             previewImage = favicon[0];
@@ -290,43 +346,13 @@ class BrowserRenderer {
                     }
                 }
                 
-                // Method 3: Try capturePage as last resort (often doesn't work)
-                if (!previewImage && this.webview.capturePage) {
-                    try {
-                        const dataUrl = await this.webview.capturePage();
-                        if (dataUrl && dataUrl.startsWith('data:')) {
-                            previewImage = dataUrl;
-                            console.log('Preview captured using capturePage');
-                        }
-                    } catch (e) {
-                        console.log('capturePage failed:', e);
-                    }
-                }
-                
-                // Method 4: Try to get a website thumbnail from external service
+                // Method 3: Create a simple text-based preview (no canvas)
                 if (!previewImage) {
-                    try {
-                        const url = this.webview.src;
-                        if (url && url.startsWith('http')) {
-                            const thumbnailUrl = await this.getWebsiteThumbnail(url);
-                            if (thumbnailUrl) {
-                                previewImage = thumbnailUrl;
-                                console.log('Using external thumbnail service');
-                            }
-                        }
-                    } catch (e) {
-                        console.log('External thumbnail failed:', e);
-                    }
-                }
-                
-                if (previewImage) {
-                    activeTab.previewImage = previewImage;
-                    activeTab.previewText = null;
-                    console.log('Preview image set successfully');
-                } else {
-                    // Fallback to text preview
                     activeTab.previewText = this.webview.getTitle() || 'Website';
                     console.log('Using text preview as fallback');
+                } else {
+                    activeTab.previewImage = previewImage;
+                    activeTab.previewText = null;
                 }
                 
                 this.renderTabs();
@@ -340,90 +366,9 @@ class BrowserRenderer {
         }
     }
     
-    // Create a canvas-based preview as fallback
-    async createCanvasPreview() {
-        try {
-            // Create a canvas element
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // Set canvas size to match tab preview dimensions
-            canvas.width = 280;
-            canvas.height = 120;
-            
-            // Create a gradient background
-            const gradient = ctx.createLinearGradient(0, 0, 0, 120);
-            gradient.addColorStop(0, '#667eea');
-            gradient.addColorStop(1, '#764ba2');
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 280, 120);
-            
-            // Add a subtle pattern overlay
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            for (let i = 0; i < 280; i += 20) {
-                for (let j = 0; j < 120; j += 20) {
-                    if ((i + j) % 40 === 0) {
-                        ctx.fillRect(i, j, 10, 10);
-                    }
-                }
-            }
-            
-            // Add website icon placeholder
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.beginPath();
-            ctx.arc(140, 40, 20, 0, 2 * Math.PI);
-            ctx.fill();
-            
-            // Add text
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            const title = this.webview.getTitle() || 'Website';
-            // Truncate title if too long
-            const displayTitle = title.length > 25 ? title.substring(0, 22) + '...' : title;
-            ctx.fillText(displayTitle, 140, 80);
-            
-            // Add URL info
-            ctx.font = '12px Arial';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            const url = this.webview.src || '';
-            const domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-            if (domain && domain !== 'speed-dial.html') {
-                ctx.fillText(domain, 140, 100);
-            }
-            
-            // Convert to data URL
-            return canvas.toDataURL('image/png');
-        } catch (error) {
-            console.log('Canvas preview creation failed:', error);
-            return null;
-        }
-    }
+
     
-    // Try to get website thumbnail from external service
-    async getWebsiteThumbnail(url) {
-        try {
-            // Use a free thumbnail service
-            const domain = new URL(url).hostname;
-            const thumbnailUrl = `https://api.apiflash.com/v1/urltoimage?access_key=demo&url=${encodeURIComponent(url)}&width=280&height=120&format=jpeg&quality=85`;
-            
-            // Test if the image loads
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => resolve(thumbnailUrl);
-                img.onerror = () => resolve(null);
-                img.src = thumbnailUrl;
-                // Timeout after 3 seconds
-                setTimeout(() => resolve(null), 3000);
-            });
-        } catch (error) {
-            console.log('Thumbnail service error:', error);
-            return null;
-        }
-    }
+
     
     // Schedule multiple preview capture attempts
     schedulePreviewCapture() {
@@ -546,19 +491,29 @@ class BrowserRenderer {
     // Mouse Gesture Handling
     handleMouseDown(e) {
         if (e.button === 2) { // Right mouse button
+            // Prevent the event from being captured by the webview
+            e.preventDefault();
+            e.stopPropagation();
+            
             this.mouseGesture.isTracking = true;
             this.mouseGesture.startX = e.clientX;
             this.mouseGesture.startY = e.clientY;
             this.mouseGesture.path = [];
             console.log('Mouse gesture tracking started at:', e.clientX, e.clientY);
             
-            // Add visual feedback
-            document.body.style.cursor = 'crosshair';
+            // Add visual feedback only to the tab panel, not the entire document
+            if (this.tabPanel) {
+                this.tabPanel.style.cursor = 'crosshair';
+            }
         }
     }
 
     handleMouseMove(e) {
         if (this.mouseGesture.isTracking) {
+            // Prevent the event from being captured by the webview during gesture tracking
+            e.preventDefault();
+            e.stopPropagation();
+            
             this.mouseGesture.path.push({
                 x: e.clientX - this.mouseGesture.startX,
                 y: e.clientY - this.mouseGesture.startY
@@ -568,11 +523,17 @@ class BrowserRenderer {
 
     async handleMouseUp(e) {
         if (this.mouseGesture.isTracking && e.button === 2) {
+            // Prevent the event from being captured by the webview
+            e.preventDefault();
+            e.stopPropagation();
+            
             this.mouseGesture.isTracking = false;
             console.log('Mouse gesture tracking ended');
             
-            // Remove visual feedback
-            document.body.style.cursor = 'default';
+            // Remove visual feedback only from the tab panel
+            if (this.tabPanel) {
+                this.tabPanel.style.cursor = 'default';
+            }
             
             this.processMouseGesture();
         }

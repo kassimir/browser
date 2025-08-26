@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWebviewTitleChange: (callback) => ipcRenderer.on('webview-title-change', callback),
   onWebviewFaviconChange: (callback) => ipcRenderer.on('webview-favicon-change', callback),
   
+  // Capture webview content
+  captureWebview: () => ipcRenderer.invoke('capture-webview'),
+  
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });
